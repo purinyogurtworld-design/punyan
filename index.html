@@ -4,6 +4,92 @@
 		<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 		<meta http-equiv="Pragma" content="no-cache">
 		<meta charset="utf-8">
+<script>
+/* 疑似横画面: iPhoneのSafariは向きを固定できないので、縦持ちのまま画面を90度回して横画面にする。
+   Godotには「横長のウィンドウ」に見せ(innerWidth/innerHeightを入れ替え)、キャンバスをCSSで回し、タッチ座標を逆回転して渡す。 */
+(function () {
+  var dW = Object.getOwnPropertyDescriptor(window, 'innerWidth'), dH = Object.getOwnPropertyDescriptor(window, 'innerHeight');
+  if (!dW || !dH || !dW.get || !dH.get) return;
+  var gw = dW.get.bind(window), gh = dH.get.bind(window);
+  var rot = false;
+  try { rot = localStorage.getItem('tc_rot') === '1'; } catch (e) {}
+  var st = document.createElement('style');
+  function css() {
+    var W = gw();
+    st.textContent = rot ? '#canvas{position:fixed!important;left:0!important;top:0!important;transform-origin:0 0!important;transform:translateX(' + W + 'px) rotate(90deg)!important;}' : '';
+  }
+  document.head.appendChild(st);
+  Object.defineProperty(window, 'innerWidth', { configurable: true, get: function () { return rot ? gh() : gw(); } });
+  Object.defineProperty(window, 'innerHeight', { configurable: true, get: function () { return rot ? gw() : gh(); } });
+  function save() { try { localStorage.setItem('tc_rot', rot ? '1' : '0'); } catch (e) {} }
+  function fire() { css(); setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0); setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 250); }
+  window.tcRotate = function (on) { rot = !!on; save(); fire(); };
+  window.tcInfo = function () { if (rot) return 'rot'; return gw() < gh() ? 'port' : 'land'; };
+  window.addEventListener('resize', function () { if (rot && gw() > gh()) { rot = false; save(); css(); } else if (rot) { css(); } }, true);
+  css();
+  // Godotはキャンバスの位置・大きさ(getBoundingClientRect)を使って座標を換算する。回っているあいだは、回す前の長方形を教える
+  var gbr = Element.prototype.getBoundingClientRect;
+  Element.prototype.getBoundingClientRect = function () {
+    var r = gbr.call(this);
+    if (rot && this && this.id === 'canvas') {
+      try { return new DOMRect(0, 0, gh(), gw()); } catch (e) { return r; }
+    }
+    return r;
+  };
+  // 座標を、回す前のキャンバスの座標に直す
+  function mapXY(X, Y) { var W = gw(); return [Y, W - X]; }      // 回す前のキャンバス(CSSの大きさ = 画面の縦×横を入れ替えたもの)の座標
+  function mapD(dX, dY) { return [dY, -dX]; }
+  function patch(o, proto) {
+    var gx = Object.getOwnPropertyDescriptor(proto, 'clientX'), gy = Object.getOwnPropertyDescriptor(proto, 'clientY');
+    if (!gx || !gy) return;
+    var fx = gx.get, fy = gy.get;
+    var defs = {};
+    ['clientX', 'pageX', 'screenX', 'offsetX', 'x'].forEach(function (k) {
+      var d = Object.getOwnPropertyDescriptor(proto, k); if (d && d.get) defs[k] = d.get;
+    });
+    ['clientY', 'pageY', 'screenY', 'offsetY', 'y'].forEach(function (k) {
+      var d = Object.getOwnPropertyDescriptor(proto, k); if (d && d.get) defs[k] = d.get;
+    });
+    Object.keys(defs).forEach(function (k) {
+      var isX = /X$|^x$/.test(k), g = defs[k];
+      Object.defineProperty(o, k, { configurable: true, get: function () {
+        if (!rot) return g.call(o);
+        var m = mapXY(fx.call(o), fy.call(o));
+        return isX ? m[0] : m[1];
+      } });
+    });
+  }
+  function patchMove(e) {
+    var gx = Object.getOwnPropertyDescriptor(MouseEvent.prototype, 'movementX'), gy = Object.getOwnPropertyDescriptor(MouseEvent.prototype, 'movementY');
+    if (!gx || !gy) return;
+    Object.defineProperty(e, 'movementX', { configurable: true, get: function () { return rot ? mapD(gx.get.call(e), gy.get.call(e))[0] : gx.get.call(e); } });
+    Object.defineProperty(e, 'movementY', { configurable: true, get: function () { return rot ? mapD(gx.get.call(e), gy.get.call(e))[1] : gy.get.call(e); } });
+  }
+  var mouseTypes = ['mousedown', 'mouseup', 'mousemove', 'click', 'dblclick', 'contextmenu', 'wheel', 'pointerdown', 'pointerup', 'pointermove', 'pointercancel', 'pointerover', 'pointerout', 'pointerenter', 'pointerleave'];
+  mouseTypes.forEach(function (t) {
+    window.addEventListener(t, function (e) {
+      if (!rot) return;
+      patch(e, MouseEvent.prototype);
+      patchMove(e);
+    }, true);
+  });
+  // タッチ: イベントの途中でTouchの実体が作り直されるので、個々のTouchではなく、Touch全体の読み取りを差しかえる
+  try {
+    var tp = Touch.prototype;
+    var tgx = Object.getOwnPropertyDescriptor(tp, 'clientX').get, tgy = Object.getOwnPropertyDescriptor(tp, 'clientY').get;
+    [['clientX', 0], ['pageX', 0], ['screenX', 0], ['clientY', 1], ['pageY', 1], ['screenY', 1]].forEach(function (kv) {
+      var d = Object.getOwnPropertyDescriptor(tp, kv[0]);
+      if (!d || !d.get) return;
+      var orig = d.get, idx = kv[1];
+      Object.defineProperty(tp, kv[0], { configurable: true, enumerable: d.enumerable, get: function () {
+        if (!rot) return orig.call(this);
+        var m = mapXY(tgx.call(this), tgy.call(this));
+        return m[idx];
+      } });
+    });
+  } catch (e) {}
+})();
+</script>
 		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
 		<title>Time Crossing (仮題)</title>
 		<style>
@@ -78,8 +164,8 @@ body {
 	z-index: 1;
 }
 		</style>
-		<link id="-gd-engine-icon" rel="icon" type="image/png" href="tc10161021.icon.png" />
-<link rel="apple-touch-icon" href="tc10161021.apple-touch-icon.png"/>
+		<link id="-gd-engine-icon" rel="icon" type="image/png" href="tc10161127.icon.png" />
+<link rel="apple-touch-icon" href="tc10161127.apple-touch-icon.png"/>
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="theme-color" content="#0a0f1a"><style>html,body{touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;background:#0a0f1a}</style>
 	</head>
 	<body>
@@ -92,14 +178,14 @@ body {
 		</noscript>
 
 		<div id="status">
-			<img id="status-splash" src="tc10161021.png" alt="">
+			<img id="status-splash" src="tc10161127.png" alt="">
 			<progress id="status-progress"></progress>
 			<div id="status-notice"></div>
 		</div>
 
-		<script src="tc10161021.js"></script>
+		<script src="tc10161127.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":false,"executable":"tc10161021","experimentalVK":true,"fileSizes":{"tc10161021.pck":17617552,"tc10161021.wasm":35376909},"focusCanvas":true,"gdextensionLibs":[]};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":false,"executable":"tc10161127","experimentalVK":true,"fileSizes":{"tc10161127.pck":17619952,"tc10161127.wasm":35376909},"focusCanvas":true,"gdextensionLibs":[]};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 
