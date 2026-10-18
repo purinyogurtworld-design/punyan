@@ -12,27 +12,59 @@
   if (!dW || !dH || !dW.get || !dH.get) return;
   var gw = dW.get.bind(window), gh = dH.get.bind(window);
   var rot = false;
+  var stableH = gh();      // キーボードが出る前の画面の高さ(回したときの『横幅』になる。キーボードで縮めない)
   try { rot = localStorage.getItem('tc_rot') === '1'; } catch (e) {}
+  // 画面の拡大縮小を止める(回したキャンバスが画面より広くなっても、ページ全体が縮んで広がらないように)
+  function lockZoom() {
+    try {
+      var m = document.querySelector('meta[name=viewport]');
+      if (!m) { m = document.createElement('meta'); m.name = 'viewport'; document.head.appendChild(m); }
+      m.content = 'width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover';
+    } catch (e) {}
+  }
+  lockZoom();
+  // 端末の画面の長い辺(CSSピクセル)。回したときの『横幅』の上限にする(ページが広がっても、これより大きくしない)
+  function longSide() {
+    var a = 0;
+    try { a = Math.max(screen.width || 0, screen.height || 0); } catch (e) {}
+    return a > 0 ? a : Math.max(gw(), gh());
+  }
   var st = document.createElement('style');
   function css() {
     var W = gw();
-    st.textContent = rot ? '#canvas{position:fixed!important;left:0!important;top:0!important;transform-origin:0 0!important;transform:translateX(' + W + 'px) rotate(90deg)!important;}' : '';
+    st.textContent = rot ? 'html,body{overflow:hidden!important;overscroll-behavior:none!important;width:100%!important;height:100%!important;margin:0!important;}' +
+      '#canvas{position:fixed!important;left:0!important;top:0!important;transform-origin:0 0!important;transform:translateX(' + W + 'px) rotate(90deg)!important;}' : '';
   }
   document.head.appendChild(st);
-  Object.defineProperty(window, 'innerWidth', { configurable: true, get: function () { return rot ? gh() : gw(); } });
+  function rotW() { return Math.min(Math.max(gh(), stableH), longSide()); }
+  Object.defineProperty(window, 'innerWidth', { configurable: true, get: function () { return rot ? rotW() : gw(); } });
   Object.defineProperty(window, 'innerHeight', { configurable: true, get: function () { return rot ? gw() : gh(); } });
   function save() { try { localStorage.setItem('tc_rot', rot ? '1' : '0'); } catch (e) {} }
   function fire() { css(); setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 0); setTimeout(function () { window.dispatchEvent(new Event('resize')); }, 250); }
   window.tcRotate = function (on) { rot = !!on; save(); fire(); };
   window.tcInfo = function () { if (rot) return 'rot'; return gw() < gh() ? 'port' : 'land'; };
-  window.addEventListener('resize', function () { if (rot && gw() > gh()) { rot = false; save(); css(); } else if (rot) { css(); } }, true);
+  // 本体を実際に横向きにしたときだけ、疑似横画面をやめる(キーボードが出て画面が低くなっただけでは、やめない)
+  function devLandscape() {
+    try { if (screen.orientation && screen.orientation.type) return screen.orientation.type.indexOf('landscape') === 0; } catch (e) {}
+    return typeof window.orientation === 'number' && Math.abs(window.orientation) === 90;
+  }
+  var wasLand = devLandscape();
+  function onTurn() {
+    if (gh() > stableH) stableH = Math.min(gh(), longSide());
+    var l = devLandscape();
+    if (rot && l && !wasLand) { rot = false; save(); }
+    wasLand = l;
+    css();
+  }
+  window.addEventListener('orientationchange', function () { setTimeout(function () { stableH = gh(); onTurn(); }, 300); }, true);
+  window.addEventListener('resize', onTurn, true);
   css();
   // Godotはキャンバスの位置・大きさ(getBoundingClientRect)を使って座標を換算する。回っているあいだは、回す前の長方形を教える
   var gbr = Element.prototype.getBoundingClientRect;
   Element.prototype.getBoundingClientRect = function () {
     var r = gbr.call(this);
     if (rot && this && this.id === 'canvas') {
-      try { return new DOMRect(0, 0, gh(), gw()); } catch (e) { return r; }
+      try { return new DOMRect(0, 0, rotW(), gw()); } catch (e) { return r; }
     }
     return r;
   };
@@ -91,7 +123,7 @@
 })();
 </script>
 		<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
-		<title>Time Crossing (仮題)</title>
+		<title>プニャンワールド</title>
 		<style>
 html, body, #canvas {
 	margin: 0;
@@ -164,8 +196,8 @@ body {
 	z-index: 1;
 }
 		</style>
-		<link id="-gd-engine-icon" rel="icon" type="image/png" href="tc10161127.icon.png" />
-<link rel="apple-touch-icon" href="tc10161127.apple-touch-icon.png"/>
+		<link id="-gd-engine-icon" rel="icon" type="image/png" href="tc10172328.icon.png" />
+<link rel="apple-touch-icon" href="tc10172328.apple-touch-icon.png"/>
 <meta name="apple-mobile-web-app-capable" content="yes"><meta name="mobile-web-app-capable" content="yes"><meta name="theme-color" content="#0a0f1a"><style>html,body{touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;background:#0a0f1a}</style>
 	</head>
 	<body>
@@ -178,14 +210,14 @@ body {
 		</noscript>
 
 		<div id="status">
-			<img id="status-splash" src="tc10161127.png" alt="">
+			<img id="status-splash" src="tc10172328.png" alt="">
 			<progress id="status-progress"></progress>
 			<div id="status-notice"></div>
 		</div>
 
-		<script src="tc10161127.js"></script>
+		<script src="tc10172328.js"></script>
 		<script>
-const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":false,"executable":"tc10161127","experimentalVK":true,"fileSizes":{"tc10161127.pck":17619952,"tc10161127.wasm":35376909},"focusCanvas":true,"gdextensionLibs":[]};
+const GODOT_CONFIG = {"args":[],"canvasResizePolicy":2,"ensureCrossOriginIsolationHeaders":false,"executable":"tc10172328","experimentalVK":true,"fileSizes":{"tc10172328.pck":62247280,"tc10172328.wasm":35376909},"focusCanvas":true,"gdextensionLibs":[]};
 const GODOT_THREADS_ENABLED = false;
 const engine = new Engine(GODOT_CONFIG);
 

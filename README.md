@@ -1,20 +1,13 @@
-# Web版(iPhone Safari / Android Chrome / PCブラウザ)
+# プニャンワールド Web改修版
 
-## 遊び方(いちばん簡単)
-1. `web_build/` の中身(index.html など一式)を、HTTPSで公開できる場所に置く(GitHub Pages が簡単)。
-2. スマホでそのURLを開く。**横向き**で遊ぶのがおすすめ。
-3. 画面右下に仮想十字キー・決定・戻るなどのボタンが出る(タッチ画面の端末では自動)。PCでは右上の「操作」で出し入れ。PCはキーボード(矢印/WASD, Space, Z, X, C, M, Esc, Enter)もそのまま使える。
+Python 3が必要です。ZIPをすべて展開して、Windowsならrun_web.bat、macOS/Linuxならrun_web.shを実行します。または、このフォルダで python3 run_web.py を実行してください。
 
-## GitHub Pages に公開する手順
-- A) 手動: `web_build/` の中身をリポジトリの `docs/` か `gh-pages` ブランチに置き、Settings > Pages で公開元を指定。`.nojekyll` を一緒に置くこと。
-- B) 自動: このプロジェクトごとGitHubへpush(`.github/workflows/pages.yml` が Godot 4.3 で書き出して公開)。Settings > Pages > Source を「GitHub Actions」に。
+http://localhost:8080 をブラウザで開きます。index.htmlの直接ダブルクリックでは起動しません。終了はサーバーの画面でCtrl+C。
 
-## 作り(Web用の設定)
-- Godot 4.3 / `gl_compatibility`(WebGL2)/ **スレッドなし**(`variant/thread_support=false`)。GitHub Pages は SharedArrayBuffer 用のヘッダーを付けられないため。
-- 日本語フォントは同梱(`assets/fonts/NotoSansJP-subset.otf`、SIL OFL。使う文字だけに絞った版)。Web版はスマホのフォントを使えないため。
-- セーブはブラウザの保存領域(IndexedDB)。ブラウザのデータを消すとセーブも消える。
-- 音は、画面を最初にタップするまで鳴らない(ブラウザの決まり)。
+Godot 4.3の元Webランタイムに改修PCKを組み込んでいます。同じPCKをネイティブGodotで起動・検証済みですが、ブラウザのWASM実行・IndexedDB・スマホ実機は未検証です。PS5級の商用完成版ではありません。
 
-## 書き出し直し
-Godot 4.3 と Web用の書き出しテンプレート(4.3.stable)を入れて:
-`godot --headless --path . --export-release Web build/web/index.html`
+既存Webセーブを使う場合は同じ配信元URLを保って更新してください。localhostや別URLには古いブラウザの保存データは自動移行されません。ブラウザのサイトデータを消去しないでください。
+
+ダンジョン1: 矢印/WASD/タップ、Space待機、Z攻撃。ダンジョン2: 左右/A・D移動、Spaceジャンプ、Z攻撃、X/Shiftダッシュ。タッチパッド、画面向き、軽量描画、画面揺れ軽減はゲームの設定から操作できます。
+
+詳細は同梱のREPORT.mdを参照してください。
