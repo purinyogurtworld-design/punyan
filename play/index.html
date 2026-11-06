@@ -31,48 +31,19 @@ ul { margin: 16px 0 0; padding-left: 1.2em; font-size: 12.5px; line-height: 1.7;
 <noscript>JavaScript を有効にしてください。</noscript>
 <div id="load"><div class="box">
   <h1>プリンワールド</h1>
-  <div class="sub">ブラウザ版 0.12.11（テスト用）</div>
+  <div class="sub">ブラウザ版 0.12.12（テスト用）</div>
   <div class="bar wait" id="bar"><i></i></div>
   <div id="msg">読み込みの準備をしています…</div>
   <ul>
-    <li>はじめて開いたときは、ゲーム全体（約 405 MB）を読み込みます。2回目からは速くなります。</li>
+    <li>まず最初の約 82 MB を読み込んで始まります。残り（約 347 MB）はプロローグを見ている間に読み込みます。</li>
     <li>パソコンの Chrome か Edge でどうぞ。スマホでは動かないことがあります。</li>
     <li>冒険の記録はこのブラウザに残ります（別のブラウザやPCには引き継がれません）。</li>
   </ul>
   <div id="err"></div>
 </div></div>
-<script>
-// PunyanWorld.pck is split into parts (GitHub keeps files small); Godot gets them back as one stream.
-const PACK_PARTS = ["pack/PunyanWorld.pck.00", "pack/PunyanWorld.pck.01", "pack/PunyanWorld.pck.02", "pack/PunyanWorld.pck.03", "pack/PunyanWorld.pck.04", "pack/PunyanWorld.pck.05", "pack/PunyanWorld.pck.06", "pack/PunyanWorld.pck.07", "pack/PunyanWorld.pck.08"];
-const _fetch = window.fetch.bind(window);
-window.fetch = function (input, init) {
-  const url = typeof input === 'string' ? input : (input && input.url) || '';
-  if (!url.endsWith('PunyanWorld.pck')) return _fetch(input, init);
-  let next = 0, reader = null;
-  const pending = [];
-  const ahead = () => { while (pending.length < 3 && next < PACK_PARTS.length) pending.push(_fetch(PACK_PARTS[next++])); };
-  const stream = new ReadableStream({
-    async pull(controller) {
-      for (;;) {
-        if (!reader) {
-          ahead();
-          if (!pending.length) { controller.close(); return; }
-          const r = await pending.shift();
-          if (!r.ok) { controller.error(new Error('ゲームのデータを読み込めませんでした（' + r.status + '）')); return; }
-          reader = r.body.getReader();
-        }
-        const { done, value } = await reader.read();
-        if (done) { reader = null; continue; }
-        controller.enqueue(value); return;
-      }
-    }
-  });
-  return Promise.resolve(new Response(stream, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } }));
-};
-</script>
 <script src="PunyanWorld.js"></script>
 <script>
-const GODOT_CONFIG = {"args": [], "canvasResizePolicy": 2, "ensureCrossOriginIsolationHeaders": false, "executable": "PunyanWorld", "experimentalVK": false, "fileSizes": {"PunyanWorld.pck": 389201376, "PunyanWorld.wasm": 35376909}, "focusCanvas": true, "gdextensionLibs": [], "serviceWorker": ""};
+const GODOT_CONFIG = {"args": [], "canvasResizePolicy": 2, "ensureCrossOriginIsolationHeaders": false, "executable": "PunyanWorld", "experimentalVK": false, "fileSizes": {"PunyanWorld.pck": 50589984, "PunyanWorld.wasm": 35376909}, "focusCanvas": true, "gdextensionLibs": [], "serviceWorker": ""};
 const engine = new Engine(GODOT_CONFIG);
 (function () {
   const load = document.getElementById('load'), bar = document.getElementById('bar'), msg = document.getElementById('msg'), err = document.getElementById('err');
