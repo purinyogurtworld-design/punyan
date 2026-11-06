@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0">
+<title>プリンワールド（ブラウザ版）</title>
+<style>
+html, body, #canvas { margin: 0; padding: 0; border: 0; }
+body { background: #0d1117; color: #f3eee2; overflow: hidden; touch-action: none;
+  font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", "Noto Sans JP", sans-serif; }
+#canvas { display: block; }
+#canvas:focus { outline: none; }
+#load { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; z-index: 2;
+  background: #0d1117 url("loading.jpg") center / cover no-repeat; }
+#load::before { content: ""; position: absolute; inset: 0; background: rgba(9, 12, 18, .62); }
+.box { position: relative; width: min(560px, calc(100vw - 32px)); padding: 28px 28px 22px; border-radius: 16px;
+  background: rgba(16, 22, 30, .86); border: 1px solid rgba(255, 220, 150, .28); box-shadow: 0 16px 48px rgba(0,0,0,.5); }
+h1 { margin: 0; font-size: 30px; letter-spacing: .06em; color: #ffe6a8; }
+.sub { margin: 4px 0 18px; font-size: 13px; color: #b9c2cc; }
+.bar { height: 12px; border-radius: 6px; background: rgba(255,255,255,.12); overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ffcf6e, #ff9f5a); transition: width .2s; }
+.bar.wait i { width: 30%; animation: slide 1.2s infinite ease-in-out; }
+@keyframes slide { 0% { transform: translateX(-100%); } 100% { transform: translateX(340%); } }
+#msg { margin: 10px 0 0; font-size: 14px; min-height: 1.5em; }
+ul { margin: 16px 0 0; padding-left: 1.2em; font-size: 12.5px; line-height: 1.7; color: #c9d1d9; }
+#err { display: none; margin-top: 14px; padding: 12px; border-radius: 8px; background: #5b2a2a; border: 1px solid #a4483f; font-size: 13px; white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<canvas id="canvas">このブラウザでは遊べません。</canvas>
+<noscript>JavaScript を有効にしてください。</noscript>
+<div id="load"><div class="box">
+  <h1>プリンワールド</h1>
+  <div class="sub">ブラウザ版 0.12.11（テスト用）</div>
+  <div class="bar wait" id="bar"><i></i></div>
+  <div id="msg">読み込みの準備をしています…</div>
+  <ul>
+    <li>はじめて開いたときは、ゲーム全体（約 405 MB）を読み込みます。2回目からは速くなります。</li>
+    <li>パソコンの Chrome か Edge でどうぞ。スマホでは動かないことがあります。</li>
+    <li>冒険の記録はこのブラウザに残ります（別のブラウザやPCには引き継がれません）。</li>
+  </ul>
+  <div id="err"></div>
+</div></div>
+<script>
+// PunyanWorld.pck is split into parts (GitHub keeps files small); Godot gets them back as one stream.
+const PACK_PARTS = ["pack/PunyanWorld.pck.00", "pack/PunyanWorld.pck.01", "pack/PunyanWorld.pck.02", "pack/PunyanWorld.pck.03", "pack/PunyanWorld.pck.04", "pack/PunyanWorld.pck.05", "pack/PunyanWorld.pck.06", "pack/PunyanWorld.pck.07", "pack/PunyanWorld.pck.08"];
+const _fetch = window.fetch.bind(window);
+window.fetch = function (input, init) {
+  const url = typeof input === 'string' ? input : (input && input.url) || '';
+  if (!url.endsWith('PunyanWorld.pck')) return _fetch(input, init);
+  let next = 0, reader = null;
+  const pending = [];
+  const ahead = () => { while (pending.length < 3 && next < PACK_PARTS.length) pending.push(_fetch(PACK_PARTS[next++])); };
+  const stream = new ReadableStream({
+    async pull(controller) {
+      for (;;) {
+        if (!reader) {
+          ahead();
+          if (!pending.length) { controller.close(); return; }
+          const r = await pending.shift();
+          if (!r.ok) { controller.error(new Error('ゲームのデータを読み込めませんでした（' + r.status + '）')); return; }
+          reader = r.body.getReader();
+        }
+        const { done, value } = await reader.read();
+        if (done) { reader = null; continue; }
+        controller.enqueue(value); return;
+      }
+    }
+  });
+  return Promise.resolve(new Response(stream, { status: 200, headers: { 'Content-Type': 'application/octet-stream' } }));
+};
+</script>
+<script src="PunyanWorld.js"></script>
+<script>
+const GODOT_CONFIG = {"args": [], "canvasResizePolicy": 2, "ensureCrossOriginIsolationHeaders": false, "executable": "PunyanWorld", "experimentalVK": false, "fileSizes": {"PunyanWorld.pck": 389201376, "PunyanWorld.wasm": 35376909}, "focusCanvas": true, "gdextensionLibs": [], "serviceWorker": ""};
+const engine = new Engine(GODOT_CONFIG);
+(function () {
+  const load = document.getElementById('load'), bar = document.getElementById('bar'), msg = document.getElementById('msg'), err = document.getElementById('err');
+  function fail(e) {
+    console.error(e);
+    err.style.display = 'block';
+    err.textContent = 'うまく起動できませんでした。\n' + (e && e.message ? e.message : String(e)) + '\nページを再読み込みしても直らないときは、パソコンの Chrome か Edge でお試しください。';
+    bar.classList.remove('wait');
+  }
+  const missing = Engine.getMissingFeatures({ threads: false });
+  if (missing.length) { fail(new Error('このブラウザに足りない機能があります：' + missing.join('、'))); return; }
+  engine.startGame({
+    onProgress: function (current, total) {
+      if (current > 0 && total > 0) {
+        bar.classList.remove('wait');
+        bar.firstElementChild.style.width = (100 * current / total).toFixed(1) + '%';
+        msg.textContent = '読み込み中… ' + Math.round(current / 1048576) + ' / ' + Math.round(total / 1048576) + ' MB';
+        if (current >= total) { msg.textContent = 'ゲームを起動しています…'; bar.classList.add('wait'); }
+      }
+    },
+  }).then(function () { load.remove(); }, fail);
+}());
+</script>
+</body>
+</html>
