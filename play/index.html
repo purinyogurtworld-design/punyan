@@ -35,7 +35,7 @@ ul { margin: 16px 0 0; padding-left: 1.2em; font-size: 12.5px; line-height: 1.7;
   <div class="bar wait" id="bar"><i></i></div>
   <div id="msg">読み込みの準備をしています…</div>
   <ul>
-    <li>まず最初の約 82 MB を読み込んで始まります。残り（約 347 MB）はプロローグを見ている間に読み込みます。</li>
+    <li>最初に約 52 MB だけ読み込んで始まります。残りは遊んでいる間に裏で読み込みます。</li>
     <li>パソコンの Chrome か Edge でどうぞ。スマホでは動かないことがあります。</li>
     <li>冒険の記録はこのブラウザに残ります（別のブラウザやPCには引き継がれません）。</li>
   </ul>
@@ -43,8 +43,43 @@ ul { margin: 16px 0 0; padding-left: 1.2em; font-size: 12.5px; line-height: 1.7;
 </div></div>
 <script src="PunyanWorld.js"></script>
 <script>
-const GODOT_CONFIG = {"args": [], "canvasResizePolicy": 2, "ensureCrossOriginIsolationHeaders": false, "executable": "PunyanWorld", "experimentalVK": false, "fileSizes": {"PunyanWorld.pck": 50590176, "PunyanWorld.wasm": 35376909}, "focusCanvas": true, "gdextensionLibs": [], "serviceWorker": ""};
+const GODOT_CONFIG = {"args": [], "canvasResizePolicy": 2, "ensureCrossOriginIsolationHeaders": false, "executable": "PunyanWorld", "experimentalVK": false, "fileSizes": {"PunyanWorld.pck": 19172032, "PunyanWorld.wasm": 35376909}, "focusCanvas": true, "gdextensionLibs": [], "serviceWorker": ""};
 const engine = new Engine(GODOT_CONFIG);
+// Background download of the rest of the game (scripts/ui/stream_packs.gd asks for
+// one pack at a time). The browser fetches at full speed, outside the game's frame
+// loop, and the finished file is copied into the game's file system.
+window.pwEngine = engine;
+window.pwPacks = { bytes: 0, done: {}, error: '' };
+window.pwFetchPack = function (url, path) {
+  const st = window.pwPacks;
+  st.done[path] = false;
+  (async function () {
+    let last = '';
+    for (let attempt = 0; attempt < 6; attempt++) {
+      let got = 0;
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const reader = res.body.getReader(), parts = [];
+        for (;;) {
+          const r = await reader.read();
+          if (r.done) break;
+          parts.push(r.value); got += r.value.length; st.bytes += r.value.length;
+        }
+        const buf = new Uint8Array(got);
+        let o = 0;
+        for (const part of parts) { buf.set(part, o); o += part.length; }
+        engine.copyToFS(path, buf);
+        st.done[path] = true;
+        return;
+      } catch (e) {
+        st.bytes -= got; last = String(e && e.message ? e.message : e);
+        await new Promise(function (r) { setTimeout(r, 1500 * (attempt + 1)); });
+      }
+    }
+    st.error = last || 'download failed';
+  })();
+};
 (function () {
   const load = document.getElementById('load'), bar = document.getElementById('bar'), msg = document.getElementById('msg'), err = document.getElementById('err');
   function fail(e) {
