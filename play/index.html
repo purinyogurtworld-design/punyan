@@ -43,13 +43,34 @@ ul { margin: 16px 0 0; padding-left: 1.2em; font-size: 12.5px; line-height: 1.7;
 </div></div>
 <script src="PunyanWorld.js"></script>
 <script>
-const GODOT_CONFIG = {"args": [], "canvasResizePolicy": 2, "ensureCrossOriginIsolationHeaders": false, "executable": "PunyanWorld", "experimentalVK": false, "fileSizes": {"PunyanWorld.pck": 19713472, "PunyanWorld.wasm": 35376909}, "focusCanvas": true, "gdextensionLibs": [], "serviceWorker": ""};
+// Lighter drawing on high-density screens (phones, tablets, 4K): the game is
+// drawn at most about 1920 pixels wide (it is laid out for 1600 x 900), not at the
+// screen's full density; the picture is scaled up to fill the window.
+(function () {
+  try {
+    const d = Object.getOwnPropertyDescriptor(Window.prototype, 'devicePixelRatio') || Object.getOwnPropertyDescriptor(window, 'devicePixelRatio');
+    const real = d && d.get ? function () { return d.get.call(window) || 1; } : null;
+    if (!real) return;
+    Object.defineProperty(window, 'devicePixelRatio', { configurable: true, get: function () {
+      const r = real(), long = Math.max(window.innerWidth || 1, window.innerHeight || 1);
+      return Math.max(1, Math.min(r, 1920 / long));
+    } });
+  } catch (e) {}
+})();
+const GODOT_CONFIG = {"args": [], "canvasResizePolicy": 2, "ensureCrossOriginIsolationHeaders": false, "executable": "PunyanWorld", "experimentalVK": false, "fileSizes": {"PunyanWorld.pck": 19738336, "PunyanWorld.wasm": 35376909}, "focusCanvas": true, "gdextensionLibs": [], "serviceWorker": ""};
 const engine = new Engine(GODOT_CONFIG);
 // Background download of the rest of the game (scripts/ui/stream_packs.gd asks for
 // one pack at a time). The browser fetches at full speed, outside the game's frame
 // loop, and the finished file is copied into the game's file system.
 window.pwEngine = engine;
 window.pwPacks = { bytes: 0, done: {}, error: '' };
+// keeps only the packs this version uses (older versions' copies are removed)
+window.pwPruneCache = async function (keep) {
+  try {
+    const cache = await caches.open('punyan-packs-v1');
+    for (const req of await cache.keys()) if (keep.indexOf(req.url) < 0) await cache.delete(req);
+  } catch (e) {}
+};
 window.pwFetchPack = function (url, path) {
   const st = window.pwPacks;
   st.done[path] = false;
@@ -58,7 +79,13 @@ window.pwFetchPack = function (url, path) {
     for (let attempt = 0; attempt < 6; attempt++) {
       let got = 0;
       try {
-        const res = await fetch(url);
+        // packs are named by their content hash: a copy kept from an earlier
+        // visit is the same file, so a reload does not fetch it again
+        let cache = null;
+        try { cache = await caches.open('punyan-packs-v1'); } catch (e) { cache = null; }
+        let res = cache ? await cache.match(url) : null;
+        const fromCache = !!res;
+        if (!res) res = await fetch(url);
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const reader = res.body.getReader(), parts = [];
         for (;;) {
@@ -71,6 +98,9 @@ window.pwFetchPack = function (url, path) {
         for (const part of parts) { buf.set(part, o); o += part.length; }
         engine.copyToFS(path, buf);
         st.done[path] = true;
+        if (cache && !fromCache) {
+          try { await cache.put(url, new Response(buf, { headers: { 'Content-Type': 'application/octet-stream' } })); } catch (e) {}
+        }
         return;
       } catch (e) {
         st.bytes -= got; last = String(e && e.message ? e.message : e);
